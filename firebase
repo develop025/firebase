@@ -1,0 +1,45 @@
+ private fun writeNewUser(androidId: String, installedTime: Long) {
+        val key = database.child("users").push().key
+        if (key == null) {
+            "Couldn't get push key for posts".log(statisticLogTag)
+            return
+        }
+
+        val post = User(installedTime)
+        val postValues = post.toMap()
+
+        val childUpdates = HashMap<String, Any>()
+        childUpdates["/users/$androidId"] = postValues
+        database.updateChildren(childUpdates)
+    }
+
+    @SuppressLint("HardwareIds")
+    internal fun initFirebase(contentResolver: ContentResolver, installedTime: Long) {
+        androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+        "androidId: $androidId".log(statisticLogTag)
+
+        database = Firebase.database.reference
+
+        val usersTable = database.child("users/$androidId")
+        usersTable.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(dataSnapshot: DataSnapshot) {
+                val user: User? = dataSnapshot.getValue(User::class.java)
+                "user is: $user".log(statisticLogTag)
+                if (user == null) {
+                    installed = installedTime
+                    "getInstalledTime: $installed".log(statisticLogTag)
+                    writeNewUser(androidId, installed)
+                } else {
+                    installed = user.installTime
+                    "user.installTime: $installed".log(statisticLogTag)
+                    val allowStart = checkAppTime()
+                    subscribe.value = allowStart
+                }
+                globalCheck()
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                "Failed to read value.${error.message}".log(statisticLogTag)
+            }
+        })
+    }
